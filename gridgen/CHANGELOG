@@ -1,7 +1,3 @@
-v. 1.51.6, 17 July 2026
-        -- Replaced nan.h by a slightly safer version.
-        -- Added assertion in map_quadrilaterals() to avoid warning from
-           gcc 8.5.0.
 v. 1.51.5, 15 December 2017
         -- A seemingly minor change in issimplepoly.c that obviously makes a
            difference. Purely empirical at the moment, above my comprehension.

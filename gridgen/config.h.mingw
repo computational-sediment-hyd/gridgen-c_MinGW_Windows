@@ -1,0 +1,27 @@
+/*
+ * config.h.mingw -- 手書き config.h (MSYS2/configure を使わない場合用)
+ *
+ *   使い方:  copy config.h.mingw config.h
+ *            mingw32-make -f makefile.mingw
+ *
+ * MinGW-w64 (GCC) は tgamma / complex.h / _Complex / clog / cexp を
+ * すべて備えているので、下記の設定で足りる。
+ */
+#define HAVE_TGAMMA 1
+#define HAVE_COMPLEX 1
+#define NO_TIMER 1
+/* #undef HAVE_LGAMMA */
+/* #undef HAVE__COMPLEX__ */
+/* #undef NOCOMPLEX */
+/* #undef HAVE_GRIDNODES_H */
+
+#if defined(HAVE_COMPLEX)
+ #include <complex.h>
+ #define zdouble _Complex double
+#elif defined(HAVE__COMPLEX__)
+ #include <complex.h>
+ #define zdouble __complex__ double
+#elif defined(NOCOMPLEX)
+ #include "c99-min/complex.h"
+ #define zdouble _Complex double
+#endif

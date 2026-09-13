@@ -422,6 +422,17 @@ static void quit(char* format, ...)
     exit(1);
 }
 
+/* On Windows a text-mode stream does not return byte offsets from ftell(),
+ * so key_find() below (which does arithmetic on ftell() results) must read
+ * the parameter file as a binary stream.  On UNIX "b" is a no-op, so the
+ * same mode string is used everywhere.
+ */
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+#define GG_RMODE_BINARY "rb"
+#else
+#define GG_RMODE_BINARY "r"
+#endif
+
 static FILE* gg_fopen(char* fname, char* mode)
 {
     FILE* f = fopen(fname, mode);
@@ -491,9 +502,15 @@ static int prm_read(char* fname, FILE* fp, char* key, char* p)
 
     for (s = line; *s && isspace(*s); s++);
 
-    for (r = p; *s && (*s != '\n'); *r++ = *s++);
+    for (r = p; *s && (*s != '\n') && (*s != '\r'); *r++ = *s++);
 
     *r = 0;
+
+    /*
+     * strip trailing blanks (a CRLF file read as binary, a trailing tab, ...)
+     */
+    while (r > p && isspace((int)(unsigned char) r[-1]))
+        *--r = 0;
 
     if (gg_verbose)
         fprintf(stderr, "-> %s = \"%s\"\n", key, p);
@@ -632,7 +649,7 @@ static gridgen* gridgen_create(char* prmfname)
     FILE* data = NULL;
     int nold;
 
-    prm = gg_fopen(prmfname, "r");
+    prm = gg_fopen(prmfname, GG_RMODE_BINARY);
     gg->prmfname = prmfname;
 
     gg->vertices = vertlist_create();
@@ -2177,7 +2194,6 @@ static void map_quadrilaterals(gridgen* gg)
     /*
      * storing the found images
      */
-    assert(nq > 0);
     gg->nqivertices = calloc(nq, sizeof(int));
     gg->qivertices = malloc(nq * gg->nppq * sizeof(zdouble));
     for (i = 0; i < nq; ++i) {

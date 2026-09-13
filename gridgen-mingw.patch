@@ -1,0 +1,1982 @@
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/HEAD gridgen-mingw/gridgen/.git/HEAD
+--- gridgen-c/gridgen/.git/HEAD	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/HEAD	2026-07-13 05:53:57.291811768 +0000
+@@ -0,0 +1 @@
++ref: refs/heads/master
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/config gridgen-mingw/gridgen/.git/config
+--- gridgen-c/gridgen/.git/config	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/config	2026-07-13 05:53:57.291932154 +0000
+@@ -0,0 +1,5 @@
++[core]
++	repositoryformatversion = 0
++	filemode = true
++	bare = false
++	logallrefupdates = true
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/description gridgen-mingw/gridgen/.git/description
+--- gridgen-c/gridgen/.git/description	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/description	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1 @@
++Unnamed repository; edit this file 'description' to name the repository.
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/applypatch-msg.sample gridgen-mingw/gridgen/.git/hooks/applypatch-msg.sample
+--- gridgen-c/gridgen/.git/hooks/applypatch-msg.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/applypatch-msg.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,15 @@
++#!/bin/sh
++#
++# An example hook script to check the commit log message taken by
++# applypatch from an e-mail message.
++#
++# The hook should exit with non-zero status after issuing an
++# appropriate message if it wants to stop the commit.  The hook is
++# allowed to edit the commit message file.
++#
++# To enable this hook, rename this file to "applypatch-msg".
++
++. git-sh-setup
++commitmsg="$(git rev-parse --git-path hooks/commit-msg)"
++test -x "$commitmsg" && exec "$commitmsg" ${1+"$@"}
++:
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/commit-msg.sample gridgen-mingw/gridgen/.git/hooks/commit-msg.sample
+--- gridgen-c/gridgen/.git/hooks/commit-msg.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/commit-msg.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,24 @@
++#!/bin/sh
++#
++# An example hook script to check the commit log message.
++# Called by "git commit" with one argument, the name of the file
++# that has the commit message.  The hook should exit with non-zero
++# status after issuing an appropriate message if it wants to stop the
++# commit.  The hook is allowed to edit the commit message file.
++#
++# To enable this hook, rename this file to "commit-msg".
++
++# Uncomment the below to add a Signed-off-by line to the message.
++# Doing this in a hook is a bad idea in general, but the prepare-commit-msg
++# hook is more suited to it.
++#
++# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
++# grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
++
++# This example catches duplicate Signed-off-by lines.
++
++test "" = "$(grep '^Signed-off-by: ' "$1" |
++	 sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" || {
++	echo >&2 Duplicate Signed-off-by lines.
++	exit 1
++}
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/fsmonitor-watchman.sample gridgen-mingw/gridgen/.git/hooks/fsmonitor-watchman.sample
+--- gridgen-c/gridgen/.git/hooks/fsmonitor-watchman.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/fsmonitor-watchman.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,174 @@
++#!/usr/bin/perl
++
++use strict;
++use warnings;
++use IPC::Open2;
++
++# An example hook script to integrate Watchman
++# (https://facebook.github.io/watchman/) with git to speed up detecting
++# new and modified files.
++#
++# The hook is passed a version (currently 2) and last update token
++# formatted as a string and outputs to stdout a new update token and
++# all files that have been modified since the update token. Paths must
++# be relative to the root of the working tree and separated by a single NUL.
++#
++# To enable this hook, rename this file to "query-watchman" and set
++# 'git config core.fsmonitor .git/hooks/query-watchman'
++#
++my ($version, $last_update_token) = @ARGV;
++
++# Uncomment for debugging
++# print STDERR "$0 $version $last_update_token\n";
++
++# Check the hook interface version
++if ($version ne 2) {
++	die "Unsupported query-fsmonitor hook version '$version'.\n" .
++	    "Falling back to scanning...\n";
++}
++
++my $git_work_tree = get_working_dir();
++
++my $retry = 1;
++
++my $json_pkg;
++eval {
++	require JSON::XS;
++	$json_pkg = "JSON::XS";
++	1;
++} or do {
++	require JSON::PP;
++	$json_pkg = "JSON::PP";
++};
++
++launch_watchman();
++
++sub launch_watchman {
++	my $o = watchman_query();
++	if (is_work_tree_watched($o)) {
++		output_result($o->{clock}, @{$o->{files}});
++	}
++}
++
++sub output_result {
++	my ($clockid, @files) = @_;
++
++	# Uncomment for debugging watchman output
++	# open (my $fh, ">", ".git/watchman-output.out");
++	# binmode $fh, ":utf8";
++	# print $fh "$clockid\n@files\n";
++	# close $fh;
++
++	binmode STDOUT, ":utf8";
++	print $clockid;
++	print "\0";
++	local $, = "\0";
++	print @files;
++}
++
++sub watchman_clock {
++	my $response = qx/watchman clock "$git_work_tree"/;
++	die "Failed to get clock id on '$git_work_tree'.\n" .
++		"Falling back to scanning...\n" if $? != 0;
++
++	return $json_pkg->new->utf8->decode($response);
++}
++
++sub watchman_query {
++	my $pid = open2(\*CHLD_OUT, \*CHLD_IN, 'watchman -j --no-pretty')
++	or die "open2() failed: $!\n" .
++	"Falling back to scanning...\n";
++
++	# In the query expression below we're asking for names of files that
++	# changed since $last_update_token but not from the .git folder.
++	#
++	# To accomplish this, we're using the "since" generator to use the
++	# recency index to select candidate nodes and "fields" to limit the
++	# output to file names only. Then we're using the "expression" term to
++	# further constrain the results.
++	my $last_update_line = "";
++	if (substr($last_update_token, 0, 1) eq "c") {
++		$last_update_token = "\"$last_update_token\"";
++		$last_update_line = qq[\n"since": $last_update_token,];
++	}
++	my $query = <<"	END";
++		["query", "$git_work_tree", {$last_update_line
++			"fields": ["name"],
++			"expression": ["not", ["dirname", ".git"]]
++		}]
++	END
++
++	# Uncomment for debugging the watchman query
++	# open (my $fh, ">", ".git/watchman-query.json");
++	# print $fh $query;
++	# close $fh;
++
++	print CHLD_IN $query;
++	close CHLD_IN;
++	my $response = do {local $/; <CHLD_OUT>};
++
++	# Uncomment for debugging the watch response
++	# open ($fh, ">", ".git/watchman-response.json");
++	# print $fh $response;
++	# close $fh;
++
++	die "Watchman: command returned no output.\n" .
++	"Falling back to scanning...\n" if $response eq "";
++	die "Watchman: command returned invalid output: $response\n" .
++	"Falling back to scanning...\n" unless $response =~ /^\{/;
++
++	return $json_pkg->new->utf8->decode($response);
++}
++
++sub is_work_tree_watched {
++	my ($output) = @_;
++	my $error = $output->{error};
++	if ($retry > 0 and $error and $error =~ m/unable to resolve root .* directory (.*) is not watched/) {
++		$retry--;
++		my $response = qx/watchman watch "$git_work_tree"/;
++		die "Failed to make watchman watch '$git_work_tree'.\n" .
++		    "Falling back to scanning...\n" if $? != 0;
++		$output = $json_pkg->new->utf8->decode($response);
++		$error = $output->{error};
++		die "Watchman: $error.\n" .
++		"Falling back to scanning...\n" if $error;
++
++		# Uncomment for debugging watchman output
++		# open (my $fh, ">", ".git/watchman-output.out");
++		# close $fh;
++
++		# Watchman will always return all files on the first query so
++		# return the fast "everything is dirty" flag to git and do the
++		# Watchman query just to get it over with now so we won't pay
++		# the cost in git to look up each individual file.
++		my $o = watchman_clock();
++		$error = $output->{error};
++
++		die "Watchman: $error.\n" .
++		"Falling back to scanning...\n" if $error;
++
++		output_result($o->{clock}, ("/"));
++		$last_update_token = $o->{clock};
++
++		eval { launch_watchman() };
++		return 0;
++	}
++
++	die "Watchman: $error.\n" .
++	"Falling back to scanning...\n" if $error;
++
++	return 1;
++}
++
++sub get_working_dir {
++	my $working_dir;
++	if ($^O =~ 'msys' || $^O =~ 'cygwin') {
++		$working_dir = Win32::GetCwd();
++		$working_dir =~ tr/\\/\//;
++	} else {
++		require Cwd;
++		$working_dir = Cwd::cwd();
++	}
++
++	return $working_dir;
++}
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/post-update.sample gridgen-mingw/gridgen/.git/hooks/post-update.sample
+--- gridgen-c/gridgen/.git/hooks/post-update.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/post-update.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,8 @@
++#!/bin/sh
++#
++# An example hook script to prepare a packed repository for use over
++# dumb transports.
++#
++# To enable this hook, rename this file to "post-update".
++
++exec git update-server-info
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/pre-applypatch.sample gridgen-mingw/gridgen/.git/hooks/pre-applypatch.sample
+--- gridgen-c/gridgen/.git/hooks/pre-applypatch.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/pre-applypatch.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,14 @@
++#!/bin/sh
++#
++# An example hook script to verify what is about to be committed
++# by applypatch from an e-mail message.
++#
++# The hook should exit with non-zero status after issuing an
++# appropriate message if it wants to stop the commit.
++#
++# To enable this hook, rename this file to "pre-applypatch".
++
++. git-sh-setup
++precommit="$(git rev-parse --git-path hooks/pre-commit)"
++test -x "$precommit" && exec "$precommit" ${1+"$@"}
++:
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/pre-commit.sample gridgen-mingw/gridgen/.git/hooks/pre-commit.sample
+--- gridgen-c/gridgen/.git/hooks/pre-commit.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/pre-commit.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,49 @@
++#!/bin/sh
++#
++# An example hook script to verify what is about to be committed.
++# Called by "git commit" with no arguments.  The hook should
++# exit with non-zero status after issuing an appropriate message if
++# it wants to stop the commit.
++#
++# To enable this hook, rename this file to "pre-commit".
++
++if git rev-parse --verify HEAD >/dev/null 2>&1
++then
++	against=HEAD
++else
++	# Initial commit: diff against an empty tree object
++	against=$(git hash-object -t tree /dev/null)
++fi
++
++# If you want to allow non-ASCII filenames set this variable to true.
++allownonascii=$(git config --type=bool hooks.allownonascii)
++
++# Redirect output to stderr.
++exec 1>&2
++
++# Cross platform projects tend to avoid non-ASCII filenames; prevent
++# them from being added to the repository. We exploit the fact that the
++# printable range starts at the space character and ends with tilde.
++if [ "$allownonascii" != "true" ] &&
++	# Note that the use of brackets around a tr range is ok here, (it's
++	# even required, for portability to Solaris 10's /usr/bin/tr), since
++	# the square bracket bytes happen to fall in the designated range.
++	test $(git diff --cached --name-only --diff-filter=A -z $against |
++	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
++then
++	cat <<\EOF
++Error: Attempt to add a non-ASCII file name.
++
++This can cause problems if you want to work with people on other platforms.
++
++To be portable it is advisable to rename the file.
++
++If you know what you are doing you can disable this check using:
++
++  git config hooks.allownonascii true
++EOF
++	exit 1
++fi
++
++# If there are whitespace errors, print the offending file names and fail.
++exec git diff-index --check --cached $against --
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/pre-merge-commit.sample gridgen-mingw/gridgen/.git/hooks/pre-merge-commit.sample
+--- gridgen-c/gridgen/.git/hooks/pre-merge-commit.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/pre-merge-commit.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,13 @@
++#!/bin/sh
++#
++# An example hook script to verify what is about to be committed.
++# Called by "git merge" with no arguments.  The hook should
++# exit with non-zero status after issuing an appropriate message to
++# stderr if it wants to stop the merge commit.
++#
++# To enable this hook, rename this file to "pre-merge-commit".
++
++. git-sh-setup
++test -x "$GIT_DIR/hooks/pre-commit" &&
++        exec "$GIT_DIR/hooks/pre-commit"
++:
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/pre-push.sample gridgen-mingw/gridgen/.git/hooks/pre-push.sample
+--- gridgen-c/gridgen/.git/hooks/pre-push.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/pre-push.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,53 @@
++#!/bin/sh
++
++# An example hook script to verify what is about to be pushed.  Called by "git
++# push" after it has checked the remote status, but before anything has been
++# pushed.  If this script exits with a non-zero status nothing will be pushed.
++#
++# This hook is called with the following parameters:
++#
++# $1 -- Name of the remote to which the push is being done
++# $2 -- URL to which the push is being done
++#
++# If pushing without using a named remote those arguments will be equal.
++#
++# Information about the commits which are being pushed is supplied as lines to
++# the standard input in the form:
++#
++#   <local ref> <local oid> <remote ref> <remote oid>
++#
++# This sample shows how to prevent push of commits where the log message starts
++# with "WIP" (work in progress).
++
++remote="$1"
++url="$2"
++
++zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
++
++while read local_ref local_oid remote_ref remote_oid
++do
++	if test "$local_oid" = "$zero"
++	then
++		# Handle delete
++		:
++	else
++		if test "$remote_oid" = "$zero"
++		then
++			# New branch, examine all commits
++			range="$local_oid"
++		else
++			# Update to existing branch, examine new commits
++			range="$remote_oid..$local_oid"
++		fi
++
++		# Check for WIP commit
++		commit=$(git rev-list -n 1 --grep '^WIP' "$range")
++		if test -n "$commit"
++		then
++			echo >&2 "Found WIP commit in $local_ref, not pushing"
++			exit 1
++		fi
++	fi
++done
++
++exit 0
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/pre-rebase.sample gridgen-mingw/gridgen/.git/hooks/pre-rebase.sample
+--- gridgen-c/gridgen/.git/hooks/pre-rebase.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/pre-rebase.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,169 @@
++#!/bin/sh
++#
++# Copyright (c) 2006, 2008 Junio C Hamano
++#
++# The "pre-rebase" hook is run just before "git rebase" starts doing
++# its job, and can prevent the command from running by exiting with
++# non-zero status.
++#
++# The hook is called with the following parameters:
++#
++# $1 -- the upstream the series was forked from.
++# $2 -- the branch being rebased (or empty when rebasing the current branch).
++#
++# This sample shows how to prevent topic branches that are already
++# merged to 'next' branch from getting rebased, because allowing it
++# would result in rebasing already published history.
++
++publish=next
++basebranch="$1"
++if test "$#" = 2
++then
++	topic="refs/heads/$2"
++else
++	topic=`git symbolic-ref HEAD` ||
++	exit 0 ;# we do not interrupt rebasing detached HEAD
++fi
++
++case "$topic" in
++refs/heads/??/*)
++	;;
++*)
++	exit 0 ;# we do not interrupt others.
++	;;
++esac
++
++# Now we are dealing with a topic branch being rebased
++# on top of master.  Is it OK to rebase it?
++
++# Does the topic really exist?
++git show-ref -q "$topic" || {
++	echo >&2 "No such branch $topic"
++	exit 1
++}
++
++# Is topic fully merged to master?
++not_in_master=`git rev-list --pretty=oneline ^master "$topic"`
++if test -z "$not_in_master"
++then
++	echo >&2 "$topic is fully merged to master; better remove it."
++	exit 1 ;# we could allow it, but there is no point.
++fi
++
++# Is topic ever merged to next?  If so you should not be rebasing it.
++only_next_1=`git rev-list ^master "^$topic" ${publish} | sort`
++only_next_2=`git rev-list ^master           ${publish} | sort`
++if test "$only_next_1" = "$only_next_2"
++then
++	not_in_topic=`git rev-list "^$topic" master`
++	if test -z "$not_in_topic"
++	then
++		echo >&2 "$topic is already up to date with master"
++		exit 1 ;# we could allow it, but there is no point.
++	else
++		exit 0
++	fi
++else
++	not_in_next=`git rev-list --pretty=oneline ^${publish} "$topic"`
++	/usr/bin/perl -e '
++		my $topic = $ARGV[0];
++		my $msg = "* $topic has commits already merged to public branch:\n";
++		my (%not_in_next) = map {
++			/^([0-9a-f]+) /;
++			($1 => 1);
++		} split(/\n/, $ARGV[1]);
++		for my $elem (map {
++				/^([0-9a-f]+) (.*)$/;
++				[$1 => $2];
++			} split(/\n/, $ARGV[2])) {
++			if (!exists $not_in_next{$elem->[0]}) {
++				if ($msg) {
++					print STDERR $msg;
++					undef $msg;
++				}
++				print STDERR " $elem->[1]\n";
++			}
++		}
++	' "$topic" "$not_in_next" "$not_in_master"
++	exit 1
++fi
++
++<<\DOC_END
++
++This sample hook safeguards topic branches that have been
++published from being rewound.
++
++The workflow assumed here is:
++
++ * Once a topic branch forks from "master", "master" is never
++   merged into it again (either directly or indirectly).
++
++ * Once a topic branch is fully cooked and merged into "master",
++   it is deleted.  If you need to build on top of it to correct
++   earlier mistakes, a new topic branch is created by forking at
++   the tip of the "master".  This is not strictly necessary, but
++   it makes it easier to keep your history simple.
++
++ * Whenever you need to test or publish your changes to topic
++   branches, merge them into "next" branch.
++
++The script, being an example, hardcodes the publish branch name
++to be "next", but it is trivial to make it configurable via
++$GIT_DIR/config mechanism.
++
++With this workflow, you would want to know:
++
++(1) ... if a topic branch has ever been merged to "next".  Young
++    topic branches can have stupid mistakes you would rather
++    clean up before publishing, and things that have not been
++    merged into other branches can be easily rebased without
++    affecting other people.  But once it is published, you would
++    not want to rewind it.
++
++(2) ... if a topic branch has been fully merged to "master".
++    Then you can delete it.  More importantly, you should not
++    build on top of it -- other people may already want to
++    change things related to the topic as patches against your
++    "master", so if you need further changes, it is better to
++    fork the topic (perhaps with the same name) afresh from the
++    tip of "master".
++
++Let's look at this example:
++
++		   o---o---o---o---o---o---o---o---o---o "next"
++		  /       /           /           /
++		 /   a---a---b A     /           /
++		/   /               /           /
++	       /   /   c---c---c---c B         /
++	      /   /   /             \         /
++	     /   /   /   b---b C     \       /
++	    /   /   /   /             \     /
++    ---o---o---o---o---o---o---o---o---o---o---o "master"
++
++
++A, B and C are topic branches.
++
++ * A has one fix since it was merged up to "next".
++
++ * B has finished.  It has been fully merged up to "master" and "next",
++   and is ready to be deleted.
++
++ * C has not merged to "next" at all.
++
++We would want to allow C to be rebased, refuse A, and encourage
++B to be deleted.
++
++To compute (1):
++
++	git rev-list ^master ^topic next
++	git rev-list ^master        next
++
++	if these match, topic has not merged in next at all.
++
++To compute (2):
++
++	git rev-list master..topic
++
++	if this is empty, it is fully merged to "master".
++
++DOC_END
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/pre-receive.sample gridgen-mingw/gridgen/.git/hooks/pre-receive.sample
+--- gridgen-c/gridgen/.git/hooks/pre-receive.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/pre-receive.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,24 @@
++#!/bin/sh
++#
++# An example hook script to make use of push options.
++# The example simply echoes all push options that start with 'echoback='
++# and rejects all pushes when the "reject" push option is used.
++#
++# To enable this hook, rename this file to "pre-receive".
++
++if test -n "$GIT_PUSH_OPTION_COUNT"
++then
++	i=0
++	while test "$i" -lt "$GIT_PUSH_OPTION_COUNT"
++	do
++		eval "value=\$GIT_PUSH_OPTION_$i"
++		case "$value" in
++		echoback=*)
++			echo "echo from the pre-receive-hook: ${value#*=}" >&2
++			;;
++		reject)
++			exit 1
++		esac
++		i=$((i + 1))
++	done
++fi
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/prepare-commit-msg.sample gridgen-mingw/gridgen/.git/hooks/prepare-commit-msg.sample
+--- gridgen-c/gridgen/.git/hooks/prepare-commit-msg.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/prepare-commit-msg.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,42 @@
++#!/bin/sh
++#
++# An example hook script to prepare the commit log message.
++# Called by "git commit" with the name of the file that has the
++# commit message, followed by the description of the commit
++# message's source.  The hook's purpose is to edit the commit
++# message file.  If the hook fails with a non-zero status,
++# the commit is aborted.
++#
++# To enable this hook, rename this file to "prepare-commit-msg".
++
++# This hook includes three examples. The first one removes the
++# "# Please enter the commit message..." help message.
++#
++# The second includes the output of "git diff --name-status -r"
++# into the message, just before the "git status" output.  It is
++# commented because it doesn't cope with --amend or with squashed
++# commits.
++#
++# The third example adds a Signed-off-by line to the message, that can
++# still be edited.  This is rarely a good idea.
++
++COMMIT_MSG_FILE=$1
++COMMIT_SOURCE=$2
++SHA1=$3
++
++/usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
++
++# case "$COMMIT_SOURCE,$SHA1" in
++#  ,|template,)
++#    /usr/bin/perl -i.bak -pe '
++#       print "\n" . `git diff --cached --name-status -r`
++# 	 if /^#/ && $first++ == 0' "$COMMIT_MSG_FILE" ;;
++#  *) ;;
++# esac
++
++# SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
++# git interpret-trailers --in-place --trailer "$SOB" "$COMMIT_MSG_FILE"
++# if test -z "$COMMIT_SOURCE"
++# then
++#   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
++# fi
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/push-to-checkout.sample gridgen-mingw/gridgen/.git/hooks/push-to-checkout.sample
+--- gridgen-c/gridgen/.git/hooks/push-to-checkout.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/push-to-checkout.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,78 @@
++#!/bin/sh
++
++# An example hook script to update a checked-out tree on a git push.
++#
++# This hook is invoked by git-receive-pack(1) when it reacts to git
++# push and updates reference(s) in its repository, and when the push
++# tries to update the branch that is currently checked out and the
++# receive.denyCurrentBranch configuration variable is set to
++# updateInstead.
++#
++# By default, such a push is refused if the working tree and the index
++# of the remote repository has any difference from the currently
++# checked out commit; when both the working tree and the index match
++# the current commit, they are updated to match the newly pushed tip
++# of the branch. This hook is to be used to override the default
++# behaviour; however the code below reimplements the default behaviour
++# as a starting point for convenient modification.
++#
++# The hook receives the commit with which the tip of the current
++# branch is going to be updated:
++commit=$1
++
++# It can exit with a non-zero status to refuse the push (when it does
++# so, it must not modify the index or the working tree).
++die () {
++	echo >&2 "$*"
++	exit 1
++}
++
++# Or it can make any necessary changes to the working tree and to the
++# index to bring them to the desired state when the tip of the current
++# branch is updated to the new commit, and exit with a zero status.
++#
++# For example, the hook can simply run git read-tree -u -m HEAD "$1"
++# in order to emulate git fetch that is run in the reverse direction
++# with git push, as the two-tree form of git read-tree -u -m is
++# essentially the same as git switch or git checkout that switches
++# branches while keeping the local changes in the working tree that do
++# not interfere with the difference between the branches.
++
++# The below is a more-or-less exact translation to shell of the C code
++# for the default behaviour for git's push-to-checkout hook defined in
++# the push_to_deploy() function in builtin/receive-pack.c.
++#
++# Note that the hook will be executed from the repository directory,
++# not from the working tree, so if you want to perform operations on
++# the working tree, you will have to adapt your code accordingly, e.g.
++# by adding "cd .." or using relative paths.
++
++if ! git update-index -q --ignore-submodules --refresh
++then
++	die "Up-to-date check failed"
++fi
++
++if ! git diff-files --quiet --ignore-submodules --
++then
++	die "Working directory has unstaged changes"
++fi
++
++# This is a rough translation of:
++#
++#   head_has_history() ? "HEAD" : EMPTY_TREE_SHA1_HEX
++if git cat-file -e HEAD 2>/dev/null
++then
++	head=HEAD
++else
++	head=$(git hash-object -t tree --stdin </dev/null)
++fi
++
++if ! git diff-index --quiet --cached --ignore-submodules $head --
++then
++	die "Working directory has staged changes"
++fi
++
++if ! git read-tree -u -m "$commit"
++then
++	die "Could not update working tree to new HEAD"
++fi
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/sendemail-validate.sample gridgen-mingw/gridgen/.git/hooks/sendemail-validate.sample
+--- gridgen-c/gridgen/.git/hooks/sendemail-validate.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/sendemail-validate.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,77 @@
++#!/bin/sh
++
++# An example hook script to validate a patch (and/or patch series) before
++# sending it via email.
++#
++# The hook should exit with non-zero status after issuing an appropriate
++# message if it wants to prevent the email(s) from being sent.
++#
++# To enable this hook, rename this file to "sendemail-validate".
++#
++# By default, it will only check that the patch(es) can be applied on top of
++# the default upstream branch without conflicts in a secondary worktree. After
++# validation (successful or not) of the last patch of a series, the worktree
++# will be deleted.
++#
++# The following config variables can be set to change the default remote and
++# remote ref that are used to apply the patches against:
++#
++#   sendemail.validateRemote (default: origin)
++#   sendemail.validateRemoteRef (default: HEAD)
++#
++# Replace the TODO placeholders with appropriate checks according to your
++# needs.
++
++validate_cover_letter () {
++	file="$1"
++	# TODO: Replace with appropriate checks (e.g. spell checking).
++	true
++}
++
++validate_patch () {
++	file="$1"
++	# Ensure that the patch applies without conflicts.
++	git am -3 "$file" || return
++	# TODO: Replace with appropriate checks for this patch
++	# (e.g. checkpatch.pl).
++	true
++}
++
++validate_series () {
++	# TODO: Replace with appropriate checks for the whole series
++	# (e.g. quick build, coding style checks, etc.).
++	true
++}
++
++# main -------------------------------------------------------------------------
++
++if test "$GIT_SENDEMAIL_FILE_COUNTER" = 1
++then
++	remote=$(git config --default origin --get sendemail.validateRemote) &&
++	ref=$(git config --default HEAD --get sendemail.validateRemoteRef) &&
++	worktree=$(mktemp --tmpdir -d sendemail-validate.XXXXXXX) &&
++	git worktree add -fd --checkout "$worktree" "refs/remotes/$remote/$ref" &&
++	git config --replace-all sendemail.validateWorktree "$worktree"
++else
++	worktree=$(git config --get sendemail.validateWorktree)
++fi || {
++	echo "sendemail-validate: error: failed to prepare worktree" >&2
++	exit 1
++}
++
++unset GIT_DIR GIT_WORK_TREE
++cd "$worktree" &&
++
++if grep -q "^diff --git " "$1"
++then
++	validate_patch "$1"
++else
++	validate_cover_letter "$1"
++fi &&
++
++if test "$GIT_SENDEMAIL_FILE_COUNTER" = "$GIT_SENDEMAIL_FILE_TOTAL"
++then
++	git config --unset-all sendemail.validateWorktree &&
++	trap 'git worktree remove -ff "$worktree"' EXIT &&
++	validate_series
++fi
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/hooks/update.sample gridgen-mingw/gridgen/.git/hooks/update.sample
+--- gridgen-c/gridgen/.git/hooks/update.sample	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/hooks/update.sample	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,128 @@
++#!/bin/sh
++#
++# An example hook script to block unannotated tags from entering.
++# Called by "git receive-pack" with arguments: refname sha1-old sha1-new
++#
++# To enable this hook, rename this file to "update".
++#
++# Config
++# ------
++# hooks.allowunannotated
++#   This boolean sets whether unannotated tags will be allowed into the
++#   repository.  By default they won't be.
++# hooks.allowdeletetag
++#   This boolean sets whether deleting tags will be allowed in the
++#   repository.  By default they won't be.
++# hooks.allowmodifytag
++#   This boolean sets whether a tag may be modified after creation. By default
++#   it won't be.
++# hooks.allowdeletebranch
++#   This boolean sets whether deleting branches will be allowed in the
++#   repository.  By default they won't be.
++# hooks.denycreatebranch
++#   This boolean sets whether remotely creating branches will be denied
++#   in the repository.  By default this is allowed.
++#
++
++# --- Command line
++refname="$1"
++oldrev="$2"
++newrev="$3"
++
++# --- Safety check
++if [ -z "$GIT_DIR" ]; then
++	echo "Don't run this script from the command line." >&2
++	echo " (if you want, you could supply GIT_DIR then run" >&2
++	echo "  $0 <ref> <oldrev> <newrev>)" >&2
++	exit 1
++fi
++
++if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
++	echo "usage: $0 <ref> <oldrev> <newrev>" >&2
++	exit 1
++fi
++
++# --- Config
++allowunannotated=$(git config --type=bool hooks.allowunannotated)
++allowdeletebranch=$(git config --type=bool hooks.allowdeletebranch)
++denycreatebranch=$(git config --type=bool hooks.denycreatebranch)
++allowdeletetag=$(git config --type=bool hooks.allowdeletetag)
++allowmodifytag=$(git config --type=bool hooks.allowmodifytag)
++
++# check for no description
++projectdesc=$(sed -e '1q' "$GIT_DIR/description")
++case "$projectdesc" in
++"Unnamed repository"* | "")
++	echo "*** Project description file hasn't been set" >&2
++	exit 1
++	;;
++esac
++
++# --- Check types
++# if $newrev is 0000...0000, it's a commit to delete a ref.
++zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
++if [ "$newrev" = "$zero" ]; then
++	newrev_type=delete
++else
++	newrev_type=$(git cat-file -t $newrev)
++fi
++
++case "$refname","$newrev_type" in
++	refs/tags/*,commit)
++		# un-annotated tag
++		short_refname=${refname##refs/tags/}
++		if [ "$allowunannotated" != "true" ]; then
++			echo "*** The un-annotated tag, $short_refname, is not allowed in this repository" >&2
++			echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
++			exit 1
++		fi
++		;;
++	refs/tags/*,delete)
++		# delete tag
++		if [ "$allowdeletetag" != "true" ]; then
++			echo "*** Deleting a tag is not allowed in this repository" >&2
++			exit 1
++		fi
++		;;
++	refs/tags/*,tag)
++		# annotated tag
++		if [ "$allowmodifytag" != "true" ] && git rev-parse $refname > /dev/null 2>&1
++		then
++			echo "*** Tag '$refname' already exists." >&2
++			echo "*** Modifying a tag is not allowed in this repository." >&2
++			exit 1
++		fi
++		;;
++	refs/heads/*,commit)
++		# branch
++		if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
++			echo "*** Creating a branch is not allowed in this repository" >&2
++			exit 1
++		fi
++		;;
++	refs/heads/*,delete)
++		# delete branch
++		if [ "$allowdeletebranch" != "true" ]; then
++			echo "*** Deleting a branch is not allowed in this repository" >&2
++			exit 1
++		fi
++		;;
++	refs/remotes/*,commit)
++		# tracking branch
++		;;
++	refs/remotes/*,delete)
++		# delete tracking branch
++		if [ "$allowdeletebranch" != "true" ]; then
++			echo "*** Deleting a tracking branch is not allowed in this repository" >&2
++			exit 1
++		fi
++		;;
++	*)
++		# Anything else (is there anything else?)
++		echo "*** Update hook: unknown type of update to ref $refname of type $newrev_type" >&2
++		exit 1
++		;;
++esac
++
++# --- Finished
++exit 0
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/.git/info/exclude gridgen-mingw/gridgen/.git/info/exclude
+--- gridgen-c/gridgen/.git/info/exclude	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/.git/info/exclude	2026-07-13 05:53:57.288057088 +0000
+@@ -0,0 +1,6 @@
++# git ls-files --others --exclude-from=.git/info/exclude
++# Lines that start with '#' are comments.
++# For a project mostly in C, the following would be a good set of
++# exclude patterns (uncomment them if you want to use them):
++# *.[oa]
++# *~
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/CUSTOMISE gridgen-mingw/gridgen/CUSTOMISE
+--- gridgen-c/gridgen/CUSTOMISE	2026-07-13 05:51:35.866936155 +0000
++++ gridgen-mingw/gridgen/CUSTOMISE	2026-07-13 05:57:00.562345366 +0000
+@@ -8,20 +8,17 @@
+ # You can also customize the configuration process via the environment
+ # variables seen by ./configure.  For example:
+ #
+-#     In csh(1):
+-#	  % setenv CC acc
+-#	  & setenv CFLAGS -g
+-#	  % ./configure
+-#
+-#     In sh(1) or ksh(1):
+-#	  $ CC=acc CFLAGS=-g ./configure
++#     In sh(1), bash(1) or the MSYS2/MinGW shell:
++#	  $ CC=gcc CFLAGS=-g ./configure
+ #
+ # Variables in this file override the environmental ones.
+ #
+ #############################################################################
+ 
+ # C compiler
+-if [ -z "$CC" ]; then
++# NOTE: do not override CC when cross-compiling (./configure --host=...),
++#       otherwise the cross compiler chosen by AC_PROG_CC would be clobbered.
++if [ -z "$CC" ] && [ -z "$host_alias" ]; then
+   CC=gcc
+ fi
+ 
+@@ -33,8 +30,17 @@
+ CFLAGS_TRIANGLE="$CFLAGS -w -ffloat-store"
+ 
+ # Linker flags
++# On MinGW/MSYS2 there is no /usr/local/lib in the native (Windows) sense,
++# so do not force it onto the link line there.
+ if [ -z "$LDFLAGS" ]; then
+-  LDFLAGS="-L/usr/local/lib"
++  case "${host_os}" in
++    mingw* | msys* | cygwin*)
++      LDFLAGS=""
++      ;;
++    *)
++      LDFLAGS="-L/usr/local/lib"
++      ;;
++  esac
+ fi
+ 
+ # Installation prefix (default is /usr/local)
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/config.h.in gridgen-mingw/gridgen/config.h.in
+--- gridgen-c/gridgen/config.h.in	2026-07-13 05:51:35.867681906 +0000
++++ gridgen-mingw/gridgen/config.h.in	2026-07-13 05:55:41.448225665 +0000
+@@ -4,6 +4,7 @@
+ #undef HAVE__COMPLEX__
+ #undef NOCOMPLEX
+ #undef HAVE_GRIDNODES_H
++#undef NO_TIMER
+ 
+ #if defined(HAVE_COMPLEX)
+  #include <complex.h>
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/config.h.mingw gridgen-mingw/gridgen/config.h.mingw
+--- gridgen-c/gridgen/config.h.mingw	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/config.h.mingw	2026-07-13 06:16:58.979680432 +0000
+@@ -0,0 +1,27 @@
++/*
++ * config.h.mingw -- 手書き config.h (MSYS2/configure を使わない場合用)
++ *
++ *   使い方:  copy config.h.mingw config.h
++ *            mingw32-make -f makefile.mingw
++ *
++ * MinGW-w64 (GCC) は tgamma / complex.h / _Complex / clog / cexp を
++ * すべて備えているので、下記の設定で足りる。
++ */
++#define HAVE_TGAMMA 1
++#define HAVE_COMPLEX 1
++#define NO_TIMER 1
++/* #undef HAVE_LGAMMA */
++/* #undef HAVE__COMPLEX__ */
++/* #undef NOCOMPLEX */
++/* #undef HAVE_GRIDNODES_H */
++
++#if defined(HAVE_COMPLEX)
++ #include <complex.h>
++ #define zdouble _Complex double
++#elif defined(HAVE__COMPLEX__)
++ #include <complex.h>
++ #define zdouble __complex__ double
++#elif defined(NOCOMPLEX)
++ #include "c99-min/complex.h"
++ #define zdouble _Complex double
++#endif
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/configure.ac gridgen-mingw/gridgen/configure.ac
+--- gridgen-c/gridgen/configure.ac	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/configure.ac	2026-07-13 05:54:26.524058826 +0000
+@@ -0,0 +1,151 @@
++dnl configure.ac for gridgen
++dnl (MinGW/MSYS2 対応版 -- 旧 configure.in を autoconf 2.69/2.71 用に書き換え)
++
++AC_INIT([gridgen],[1.51.5])
++AC_CONFIG_SRCDIR([CUSTOMISE])
++AC_CONFIG_HEADERS([config.h])
++
++dnl ---------------------------------------------------------------------
++dnl ホスト種別の判定 (Windows/MinGW を識別するために必須)
++dnl ---------------------------------------------------------------------
++AC_CANONICAL_HOST
++
++dnl Get the shell variable to override local customisations.
++AC_DEFUN([AC_CUSTOMISE],
++[dnl
++    AC_BEFORE([$0], [AC_DEFAULT])dnl
++    if test -r CUSTOMISE; then
++        . ./CUSTOMISE
++    fi
++])
++
++AC_CUSTOMISE
++
++dnl Checks for programs.
++AC_PROG_CC
++AC_PROG_INSTALL
++AC_CHECK_TOOL(AR, ar, ar)
++AC_CHECK_TOOL(RANLIB, ranlib, :)
++AC_CHECK_TOOL(STRIP, strip, :)
++
++dnl EXEEXT を確定させる (MinGW では .exe)。
++dnl これを行わないと make が gridgen.exe を毎回作り直そうとする。
++AC_EXEEXT
++AC_OBJEXT
++
++AC_CHECK_HEADER(math.h, , AC_MSG_ERROR([unable to find header]))
++AC_SEARCH_LIBS(cos, m, , AC_MSG_ERROR([unable to find library libm]))
++
++AC_CHECK_FUNCS(tgamma)
++if test "$ac_cv_func_tgamma" = no; then
++  AC_CHECK_LIB(m, tgamma, AC_DEFINE(HAVE_TGAMMA))
++fi
++
++if test "$ac_cv_lib_m_tgamma" = no; then
++  AC_CHECK_FUNCS(lgamma)
++  if test "$ac_cv_func_lgamma" = no; then
++    AC_CHECK_LIB(m, lgamma, AC_DEFINE(HAVE_LGAMMA), AC_MSG_ERROR([Unable to locate both tgamma and lgamma]))
++  fi
++fi
++
++dnl ---------------------------------------------------------------------
++dnl 複素数サポート
++dnl MinGW-w64 (GCC) は complex.h / _Complex / clog / cexp をすべて備えるので
++dnl NOCOMPLEX 経路には落ちない。
++dnl ---------------------------------------------------------------------
++AC_CHECK_HEADER(complex.h, complex_h=yes, complex_h=no)
++AC_CHECK_FUNCS(clog, , complex_h=no)
++AC_CHECK_FUNCS(cexp, , complex_h=no)
++if test "$complex_h" = yes; then
++  AC_MSG_CHECKING([for keyword _Complex])
++  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <complex.h>]],
++                                     [[_Complex double z = 1.0 + 1.0 * I; (void) z;]])],
++                    [_Complex=yes], [_Complex=no])
++  AC_MSG_RESULT([$_Complex])
++
++  if test "$_Complex" = yes; then
++    AC_DEFINE(HAVE_COMPLEX)
++  else
++    AC_MSG_CHECKING([for keyword __complex__])
++    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <complex.h>]],
++                                       [[__complex__ double z = 1.0 + 1.0 * I; (void) z;]])],
++                      [__complex__=yes], [__complex__=no])
++    AC_MSG_RESULT([$__complex__])
++    if test "$__complex__" = no; then
++      AC_MSG_ERROR([keywords _Complex or __complex__ not supported])
++    else
++      AC_DEFINE(HAVE__COMPLEX__)
++    fi
++  fi
++else
++  echo '  using code in gridgen/c99-min for complex arithmetics support...'
++  echo '  warning: this may slow down things by a factor of two or so compared'
++  echo '           to a native implementation'
++  NOCOMPLEX=yes
++  AC_DEFINE(NOCOMPLEX)
++fi
++
++dnl ---------------------------------------------------------------------
++dnl gridutils (libgu) -- 任意。無くても gridgen 本体はビルドできる。
++dnl ---------------------------------------------------------------------
++AC_CHECK_HEADER(gridnodes.h, gridnodes_h=yes, gridnodes_h=no)
++if test "$gridnodes_h" = yes; then
++   AC_DEFINE(HAVE_GRIDNODES_H)
++else
++   AC_MSG_WARN([unable to find gridnodes.h. You will not be able to compile the library function gridgen_generategrid2().])
++fi
++
++AC_CHECK_LIB(gu, gridnodes_readnextpoint, , AC_MSG_WARN([unable to find library libgu; you will not be able to build the shared library]))
++
++dnl ---------------------------------------------------------------------
++dnl ホスト依存の設定 (ここが MinGW 対応の中核)
++dnl   PICFLAG        : Windows の DLL では -fPIC は無意味 (警告になる)
++dnl   SHLIB          : 共有ライブラリのファイル名
++dnl   SHLIB_LDFLAGS  : 共有ライブラリのリンクオプション
++dnl   CFLAGS_TRIANGLE: triangle.c は Windows では NO_TIMER が必要
++dnl                    (sys/time.h / gettimeofday に依存しないようにする)
++dnl ---------------------------------------------------------------------
++case "$host_os" in
++  mingw* | msys* | cygwin*)
++    WIN32=yes
++    PICFLAG=
++    SHLIB=libgridgen.dll
++    SHLIB_LDFLAGS="-shared -Wl,--out-implib,libgridgen.dll.a -Wl,--export-all-symbols"
++    CFLAGS="$CFLAGS -DNO_TIMER"
++    CFLAGS_TRIANGLE="$CFLAGS_TRIANGLE -DNO_TIMER"
++    AC_DEFINE(NO_TIMER)
++    ;;
++  darwin*)
++    WIN32=no
++    PICFLAG=-fPIC
++    SHLIB=libgridgen.dylib
++    SHLIB_LDFLAGS="-dynamiclib"
++    ;;
++  *)
++    WIN32=no
++    PICFLAG=-fPIC
++    SHLIB=libgridgen.so
++    SHLIB_LDFLAGS="-shared"
++    ;;
++esac
++AC_MSG_CHECKING([host type])
++AC_MSG_RESULT([$host_os (shared library: $SHLIB)])
++
++AC_SUBST(NOCOMPLEX)
++AC_SUBST(CC)
++AC_SUBST(CFLAGS)
++AC_SUBST(AR)
++AC_SUBST(RANLIB)
++AC_SUBST(STRIP)
++AC_SUBST(LDFLAGS)
++AC_SUBST(CFLAGS_TRIANGLE)
++AC_SUBST(HAVE_GRIDNODES_H)
++AC_SUBST(EXEEXT)
++AC_SUBST(OBJEXT)
++AC_SUBST(WIN32)
++AC_SUBST(PICFLAG)
++AC_SUBST(SHLIB)
++AC_SUBST(SHLIB_LDFLAGS)
++
++AC_CONFIG_FILES([makefile])
++AC_OUTPUT
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/configure.in gridgen-mingw/gridgen/configure.in
+--- gridgen-c/gridgen/configure.in	2026-07-13 05:51:35.868048682 +0000
++++ gridgen-mingw/gridgen/configure.in	1970-01-01 00:00:00.000000000 +0000
+@@ -1,82 +0,0 @@
+-dnl configure.in for gridgen
+-
+-AC_INIT(CUSTOMISE)
+-AC_CONFIG_HEADER(config.h)
+-
+-dnl Get the shell variable to override local customisations.
+-AC_DEFUN([AC_CUSTOMISE],
+-[dnl
+-    AC_BEFORE([$0], [AC_DEFAULT])dnl
+-    if test -r CUSTOMISE; then
+-        . ./CUSTOMISE
+-    fi
+-])
+-
+-AC_CUSTOMISE
+-
+-dnl Checks for programs.
+-AC_PROG_CC
+-AC_PROG_INSTALL
+-AC_CHECK_PROG(AR, ar, ar, :)
+-
+-AC_CHECK_HEADER(math.h, , AC_MSG_ERROR([unable to find header]))
+-AC_HAVE_LIBRARY(m, , AC_MSG_ERROR([unable to find library]))
+-
+-AC_CHECK_FUNCS(tgamma)
+-if test "$ac_cv_func_tgamma" = no; then
+-  AC_CHECK_LIB(m, tgamma, AC_DEFINE(HAVE_TGAMMA))
+-fi
+-
+-if test "$ac_cv_lib_m_tgamma" = no; then
+-  AC_CHECK_FUNCS(lgamma)
+-  if test "$ac_cv_func_lgamma" = no; then
+-    AC_CHECK_LIB(m, lgamma, AC_DEFINE(HAVE_LGAMMA), AC_MSG_ERROR('Unable to locate both tgamma and lgamma'))
+-  fi
+-fi
+-
+-AC_CHECK_HEADER(complex.h, complex_h=yes, complex_h=no)
+-AC_CHECK_FUNCS(clog, , complex_h=no)
+-AC_CHECK_FUNCS(cexp, , complex_h=no)
+-if test "$complex_h" = yes; then
+-  echo -n 'checking for keyword _Complex... '
+-  AC_TRY_COMPILE([#include <complex.h>], [_Complex double z = 1.0 + 1.0 * I;], _Complex=yes, _Complex=no)
+-  echo $_Complex
+-
+-  if test "$_Complex" = yes; then
+-    AC_DEFINE(HAVE_COMPLEX)
+-  else
+-    echo -n 'checking for keyword __complex__... '
+-    AC_TRY_COMPILE([#include <complex.h>], [__complex__ double z = 1.0 + 1.0 * I;], __complex__=yes, __complex__=no)
+-    echo $complex
+-    if test "$__complex__" = no; then
+-      AC_MSG_ERROR(keywords _Complex or __complex__ not supported)
+-    else
+-      AC_DEFINE(HAVE__COMPLEX__)
+-    fi
+-  fi
+-else
+-  echo '  using code in gridgen/c99-min for complex arithmetics support...'
+-  echo '  warning: this may slow down things by a factor of two or so compared'
+-  echo '           to a native implementation'
+-  NOCOMPLEX=yes
+-  AC_DEFINE(NOCOMPLEX)
+-fi
+-
+-AC_CHECK_HEADER(gridnodes.h, gridnodes_h=yes, gridnodes_h=no)
+-if test "$gridnodes_h" = yes; then
+-   AC_DEFINE(HAVE_GRIDNODES_H)
+-else
+-   AC_MSG_WARN([unable to find gridnodes.h. You will not be able to compile the library function gridgen_generategrid2(). Please modify your LD_LIBRARY_PATH and re-run this script if necessary.])
+-fi
+-
+-AC_CHECK_LIB(gu, gridnodes_readnextpoint, , AC_MSG_WARN([unable to find library libgu; you will not be able to build the shared library]))
+-
+-AC_SUBST(NOCOMPLEX)
+-AC_SUBST(CC)
+-AC_SUBST(CFLAGS)
+-AC_SUBST(AR)
+-AC_SUBST(LDFLAGS)
+-AC_SUBST(CFLAGS_TRIANGLE)
+-AC_SUBST(HAVE_GRIDNODES_H)
+-
+-AC_OUTPUT(makefile)
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/gridgen.c gridgen-mingw/gridgen/gridgen.c
+--- gridgen-c/gridgen/gridgen.c	2026-07-13 05:51:35.888048683 +0000
++++ gridgen-mingw/gridgen/gridgen.c	2026-07-13 06:05:35.783649524 +0000
+@@ -422,6 +422,17 @@
+     exit(1);
+ }
+ 
++/* On Windows a text-mode stream does not return byte offsets from ftell(),
++ * so key_find() below (which does arithmetic on ftell() results) must read
++ * the parameter file as a binary stream.  On UNIX "b" is a no-op, so the
++ * same mode string is used everywhere.
++ */
++#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
++#define GG_RMODE_BINARY "rb"
++#else
++#define GG_RMODE_BINARY "r"
++#endif
++
+ static FILE* gg_fopen(char* fname, char* mode)
+ {
+     FILE* f = fopen(fname, mode);
+@@ -491,10 +502,16 @@
+ 
+     for (s = line; *s && isspace(*s); s++);
+ 
+-    for (r = p; *s && (*s != '\n'); *r++ = *s++);
++    for (r = p; *s && (*s != '\n') && (*s != '\r'); *r++ = *s++);
+ 
+     *r = 0;
+ 
++    /*
++     * strip trailing blanks (a CRLF file read as binary, a trailing tab, ...)
++     */
++    while (r > p && isspace((int)(unsigned char) r[-1]))
++        *--r = 0;
++
+     if (gg_verbose)
+         fprintf(stderr, "-> %s = \"%s\"\n", key, p);
+ 
+@@ -632,7 +649,7 @@
+     FILE* data = NULL;
+     int nold;
+ 
+-    prm = gg_fopen(prmfname, "r");
++    prm = gg_fopen(prmfname, GG_RMODE_BINARY);
+     gg->prmfname = prmfname;
+ 
+     gg->vertices = vertlist_create();
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/makefile.in gridgen-mingw/gridgen/makefile.in
+--- gridgen-c/gridgen/makefile.in	2026-07-13 05:51:35.888048683 +0000
++++ gridgen-mingw/gridgen/makefile.in	2026-07-13 05:55:15.072276903 +0000
+@@ -1,5 +1,6 @@
+ #
+ # makefile.in - Input makefile for the configure script.
++#               (MinGW/MSYS2 correspondence version)
+ #
+ 
+ SHELL = /bin/sh
+@@ -34,11 +35,26 @@
+ 
+ AR = @AR@
+ ARFLAGS = cru
++RANLIB = @RANLIB@
++STRIP = @STRIP@
+ 
+ LIBS = @LIBS@
+ 
+ MLIB = -lm
+ 
++# --- host dependent (determined by configure) ------------------------
++# EXEEXT        : ".exe" on Windows, empty on Unix
++# PICFLAG       : "-fPIC" on Unix, empty on Windows (not needed for DLLs)
++# SHLIB         : libgridgen.dll / libgridgen.so / libgridgen.dylib
++# SHLIB_LDFLAGS : -shared -Wl,--out-implib,... etc.
++EXEEXT = @EXEEXT@
++PICFLAG = @PICFLAG@
++SHLIB = @SHLIB@
++SHLIB_LDFLAGS = @SHLIB_LDFLAGS@
++WIN32 = @WIN32@
++
++PROG = gridgen$(EXEEXT)
++
+ #### end of configuration section ####
+ 
+ SRC =\
+@@ -84,61 +100,61 @@
+ 
+ SHLIBOBJS = $(LIBSRC:.c=.t)
+ %.t: %.c
+-	$(CC) $(CFLAGS) -fPIC -c $< -o $@
++	$(CC) $(CFLAGS) $(PICFLAG) -c $< -o $@
+ 
+-all: gridgen
++all: $(PROG)
+ 	@if [ ! -f libgridgen.a ] ; then \
+ 	   echo "  type 'make lib' to make libgridgen.a"; \
+ 	fi
+-	@if [ ! -f libgridgen.so ] ; then \
+-	   echo "  type 'make shlib' to make libgridgen.so"; \
++	@if [ ! -f $(SHLIB) ] ; then \
++	   echo "  type 'make shlib' to make $(SHLIB)"; \
+ 	fi
+ 
+ lib: libgridgen.a
+ 
+-shlib: libgridgen.so
++shlib: $(SHLIB)
+ 
+-gridgen: main.c $(HEADERS) $(SRC) triangle.o
+-	$(CC) -o gridgen -DGRIDGEN_STANDALONE $(CFLAGS) main.c $(SRC) triangle.o $(LDFLAGS) $(MLIB)
++$(PROG): main.c $(HEADERS) $(SRC) triangle.o
++	$(CC) -o $(PROG) -DGRIDGEN_STANDALONE $(CFLAGS) main.c $(SRC) triangle.o $(LDFLAGS) $(MLIB)
+ 
+ tests: broyden.c issimplepoly.c hash.c
+-	$(CC) -o test_broyden broyden.c -DTEST_BROYDEN $(CFLAGS) -I. $(MLIB)
+-	$(CC) -o issimplepoly issimplepoly.c -DTEST_SI $(CFLAGS) -I. $(MLIB)
+-	$(CC) -o test_hash hash.c -DHT_TEST $(CFLAGS) -I. $(MLIB)
++	$(CC) -o test_broyden$(EXEEXT) broyden.c -DTEST_BROYDEN $(CFLAGS) -I. $(MLIB)
++	$(CC) -o issimplepoly$(EXEEXT) issimplepoly.c -DTEST_SI $(CFLAGS) -I. $(MLIB)
++	$(CC) -o test_hash$(EXEEXT) hash.c -DHT_TEST $(CFLAGS) -I. $(MLIB)
+ 
+ standalone: override CFLAGS+=-static
+-standalone: gridgen tests
+-	strip gridgen
+-	strip issimplepoly
++standalone: $(PROG) tests
++	$(STRIP) $(PROG)
++	$(STRIP) issimplepoly$(EXEEXT)
+ 
+ libgridgen.a: $(HEADERS) triangle.o $(LIBOBJS)
+ 	$(AR) $(ARFLAGS) $@ $(LIBOBJS) triangle.o
+-	chmod go+r $@
++	-$(RANLIB) $@
++	-chmod go+r $@
+ 
+-libgridgen.so: $(HEADERS) triangle.t $(SHLIBOBJS)
++$(SHLIB): $(HEADERS) triangle.t $(SHLIBOBJS)
+ 	rm -f $@
+-	$(CC) -shared -o $@ $(SHLIBOBJS) triangle.t $(LDFLAGS) $(LIBS)
++	$(CC) $(SHLIB_LDFLAGS) -o $@ $(SHLIBOBJS) triangle.t $(LDFLAGS) $(LIBS) $(MLIB)
+ 
+ triangle.o: triangle.c
+-	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c
++	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c -o triangle.o
+ 
+ triangle.t: triangle.c
+-	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -fPIC -I. triangle.c -o triangle.t
++	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) $(PICFLAG) -I. triangle.c -o triangle.t
+ 
+ installdirs: $(INSTALLDIRS)
+ 	@$(SHELL) mkinstalldirs $(INSTALLDIRS)
+ 
+ install: all installdirs
+-	@for i in gridgen; do \
++	@for i in $(PROG); do \
+ 	   echo "  installing $$i"; \
+-	   fname=`basename $$i`; \
+ 	   $(INSTALL_PROGRAM) $$i $(bindir); \
+ 	done
+ 	@for i in gridgen.h; do \
+ 	   echo "  installing $$i"; \
+ 	   $(INSTALL_DATA) $$i $(includedir); \
+ 	done
+-	@for i in libgridgen.a libgridgen.so; do \
++	@for i in libgridgen.a $(SHLIB) libgridgen.dll.a; do \
+ 	   if test -f $$i; then \
+ 	      echo "  installing $$i"; \
+ 	      $(INSTALL_DATA) $$i $(libdir)/$$i; \
+@@ -146,7 +162,9 @@
+ 	done
+ 
+ clean:
+-	rm -f *.o *.t c99-min/*.o *.a *.so *~ \#*\# core gridgen issimplepoly test_broyden test_hash
++	rm -f *.o *.t c99-min/*.o *.a *.so *.dll *.dylib *~ \#*\# core \
++	gridgen gridgen.exe issimplepoly issimplepoly.exe \
++	test_broyden test_broyden.exe test_hash test_hash.exe
+ 
+ configclean:
+ 	rm -f config.h makefile config.cache config.status config.log
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/makefile.mingw gridgen-mingw/gridgen/makefile.mingw
+--- gridgen-c/gridgen/makefile.mingw	1970-01-01 00:00:00.000000000 +0000
++++ gridgen-mingw/gridgen/makefile.mingw	2026-07-13 06:16:58.982838948 +0000
+@@ -0,0 +1,66 @@
++#
++# makefile.mingw -- MSYS2 シェルを使わずに素の Windows cmd.exe +
++#                   MinGW-w64 + mingw32-make でビルドするための makefile。
++#                   (configure / sh / autoconf は不要)
++#
++#   > copy config.h.mingw config.h
++#   > mingw32-make -f makefile.mingw
++#   > mingw32-make -f makefile.mingw lib
++#   > mingw32-make -f makefile.mingw shlib
++#   > mingw32-make -f makefile.mingw clean
++#
++# MSYS2 の MinGW シェルが使えるなら ./configure && make のほうが推奨。
++#
++
++CC      = gcc
++AR      = ar
++ARFLAGS = cru
++RANLIB  = ranlib
++RM      = del /Q
++
++CFLAGS          = -O2 -Wall -DANSI_DECLARATORS -DNO_TIMER
++CFLAGS_TRIANGLE = -O2 -w -ffloat-store -DANSI_DECLARATORS -DNO_TIMER
++LDFLAGS =
++MLIB    = -lm
++
++SHLIB_LDFLAGS = -shared -Wl,--out-implib,libgridgen.dll.a -Wl,--export-all-symbols
++
++SRC = broyden.c delaunay.c geom.c gridgen.c hash.c issimplepoly.c \
++      istack.c ode.c swcr.c vertlist.c zode.c
++
++HEADERS = broyden.h delaunay.h geom.h gridgen.h hash.h issimplepoly.h \
++          istack.h nan.h ode.h swcr.h version.h vertlist.h zode.h
++
++OBJS  = $(SRC:.c=.o)
++TOBJS = $(SRC:.c=.t)
++
++all: gridgen.exe
++
++gridgen.exe: main.c $(HEADERS) $(SRC) triangle.o
++	$(CC) -o gridgen.exe -DGRIDGEN_STANDALONE $(CFLAGS) main.c $(SRC) triangle.o $(LDFLAGS) $(MLIB)
++
++lib: libgridgen.a
++
++shlib: libgridgen.dll
++
++%.o: %.c
++	$(CC) $(CFLAGS) -c $< -o $@
++
++%.t: %.c
++	$(CC) $(CFLAGS) -c $< -o $@
++
++triangle.o: triangle.c
++	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c -o triangle.o
++
++triangle.t: triangle.c
++	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c -o triangle.t
++
++libgridgen.a: $(HEADERS) triangle.o $(OBJS)
++	$(AR) $(ARFLAGS) $@ $(OBJS) triangle.o
++	$(RANLIB) $@
++
++libgridgen.dll: $(HEADERS) triangle.t $(TOBJS)
++	$(CC) $(SHLIB_LDFLAGS) -o $@ $(TOBJS) triangle.t $(LDFLAGS) $(MLIB)
++
++clean:
++	-$(RM) *.o *.t *.a *.dll *.exe
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/nan.h gridgen-mingw/gridgen/nan.h
+--- gridgen-c/gridgen/nan.h	2026-07-13 05:51:35.888048683 +0000
++++ gridgen-mingw/gridgen/nan.h	2026-07-13 05:55:27.832292373 +0000
+@@ -25,7 +25,7 @@
+ 
+ #elif defined(_WIN32)
+ 
+-static unsigned _int64 lNaN = ((unsigned _int64) 1 << 63) - 1;
++static unsigned __int64 lNaN = ((unsigned _int64) 1 << 63) - 1;
+ 
+ #define NaN (*(double*)&lNaN)
+ 
+diff -ruN '--exclude=examples' '--exclude=configure' '--exclude=config.guess' '--exclude=config.sub' gridgen-c/gridgen/triangle.c gridgen-mingw/gridgen/triangle.c
+--- gridgen-c/gridgen/triangle.c	2026-07-13 05:51:35.896048683 +0000
++++ gridgen-mingw/gridgen/triangle.c	2026-07-13 05:58:51.273245354 +0000
+@@ -345,6 +345,31 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <math.h>
++
++/* ------------------------------------------------------------------------ */
++/* Windows (MinGW / MSVC) portability                                        */
++/*                                                                           */
++/*   1. <sys/time.h> and gettimeofday() are not portable to Windows.         */
++/*      Triangle only uses them for its (optional) timing report, so the     */
++/*      NO_TIMER switch is turned on automatically on Windows.               */
++/*                                                                           */
++/*   2. On 32-bit x86 the x87 FPU must be forced to 53-bit precision for     */
++/*      Triangle's exact arithmetic to be robust.  On Linux this is done     */
++/*      through <fpu_control.h> (LINUX switch); the Windows equivalent is    */
++/*      _control87() from <float.h> (CPU86 switch), which MinGW provides.    */
++/*      On x86-64 SSE2 is used for doubles, so neither is needed.            */
++/* ------------------------------------------------------------------------ */
++#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
++#  ifndef NO_TIMER
++#    define NO_TIMER
++#  endif
++#  if defined(__i386__) || defined(_M_IX86)
++#    if !defined(CPU86) && !defined(LINUX)
++#      define CPU86
++#    endif
++#  endif
++#endif
++
+ #ifndef NO_TIMER
+ #include <sys/time.h>
+ #endif /* not NO_TIMER */
+@@ -354,6 +379,19 @@
+ #ifdef LINUX
+ #include <fpu_control.h>
+ #endif /* LINUX */
++
++/* ------------------------------------------------------------------------ */
++/* LLP64 (Win64) safety.                                                      */
++/*                                                                            */
++/*   Triangle stores pointers in `unsigned long' and performs bit-level       */
++/*   arithmetic on them (tag bits in the low 2 bits, block alignment).  On    */
++/*   LP64 Unix that is fine (sizeof(long) == 8 == sizeof(void*)), but on      */
++/*   64-bit Windows `long' is only 32 bits wide, so every pointer would be    */
++/*   silently truncated -> immediate segfault.  `uintptr_t' is by definition  */
++/*   wide enough to hold a pointer on every platform, so it is used instead.  */
++/* ------------------------------------------------------------------------ */
++#include <stdint.h>
++typedef uintptr_t tri_uintptr;
+ #ifdef TRILIBRARY
+ #include "triangle.h"
+ #endif /* TRILIBRARY */
+@@ -831,7 +869,7 @@
+ /*  extracting an orientation (in the range 0 to 2) and a pointer to the     */
+ /*  beginning of a triangle.  The encode() routine compresses a pointer to a */
+ /*  triangle and an orientation into a single pointer.  My assumptions that  */
+-/*  triangles are four-byte-aligned and that the `unsigned long' type is     */
++/*  triangles are four-byte-aligned and that the `tri_uintptr' type is     */
+ /*  long enough to hold a pointer are two of the few kludges in this program.*/
+ /*                                                                           */
+ /*  Subsegments are manipulated similarly.  A pointer to a subsegment        */
+@@ -942,16 +980,16 @@
+ /*   extracted from the two least significant bits of the pointer.           */
+ 
+ #define decode(ptr, otri)                                                     \
+-  (otri).orient = (int) ((unsigned long) (ptr) & (unsigned long) 3l);         \
++  (otri).orient = (int) ((tri_uintptr) (ptr) & (tri_uintptr) 3l);         \
+   (otri).tri = (triangle *)                                                   \
+-                  ((unsigned long) (ptr) ^ (unsigned long) (otri).orient)
++                  ((tri_uintptr) (ptr) ^ (tri_uintptr) (otri).orient)
+ 
+ /* encode() compresses an oriented triangle into a single pointer.  It       */
+ /*   relies on the assumption that all triangles are aligned to four-byte    */
+ /*   boundaries, so the two least significant bits of (otri).tri are zero.   */
+ 
+ #define encode(otri)                                                          \
+-  (triangle) ((unsigned long) (otri).tri | (unsigned long) (otri).orient)
++  (triangle) ((tri_uintptr) (otri).tri | (tri_uintptr) (otri).orient)
+ 
+ /* The following handle manipulation primitives are all described by Guibas  */
+ /*   and Stolfi.  However, Guibas and Stolfi use an edge-based data          */
+@@ -1115,16 +1153,16 @@
+ 
+ #define infect(otri)                                                          \
+   (otri).tri[6] = (triangle)                                                  \
+-                    ((unsigned long) (otri).tri[6] | (unsigned long) 2l)
++                    ((tri_uintptr) (otri).tri[6] | (tri_uintptr) 2l)
+ 
+ #define uninfect(otri)                                                        \
+   (otri).tri[6] = (triangle)                                                  \
+-                    ((unsigned long) (otri).tri[6] & ~ (unsigned long) 2l)
++                    ((tri_uintptr) (otri).tri[6] & ~ (tri_uintptr) 2l)
+ 
+ /* Test a triangle for viral infection.                                      */
+ 
+ #define infected(otri)                                                        \
+-  (((unsigned long) (otri).tri[6] & (unsigned long) 2l) != 0l)
++  (((tri_uintptr) (otri).tri[6] & (tri_uintptr) 2l) != 0l)
+ 
+ /* Check or set a triangle's attributes.                                     */
+ 
+@@ -1162,16 +1200,16 @@
+ /*   are masked out to produce the real pointer.                             */
+ 
+ #define sdecode(sptr, osub)                                                   \
+-  (osub).ssorient = (int) ((unsigned long) (sptr) & (unsigned long) 1l);      \
++  (osub).ssorient = (int) ((tri_uintptr) (sptr) & (tri_uintptr) 1l);      \
+   (osub).ss = (subseg *)                                                      \
+-              ((unsigned long) (sptr) & ~ (unsigned long) 3l)
++              ((tri_uintptr) (sptr) & ~ (tri_uintptr) 3l)
+ 
+ /* sencode() compresses an oriented subsegment into a single pointer.  It    */
+ /*   relies on the assumption that all subsegments are aligned to two-byte   */
+ /*   boundaries, so the least significant bit of (osub).ss is zero.          */
+ 
+ #define sencode(osub)                                                         \
+-  (subseg) ((unsigned long) (osub).ss | (unsigned long) (osub).ssorient)
++  (subseg) ((tri_uintptr) (osub).ss | (tri_uintptr) (osub).ssorient)
+ 
+ /* ssym() toggles the orientation of a subsegment.                           */
+ 
+@@ -3537,27 +3575,27 @@
+   struct osub printsh;
+   vertex printvertex;
+ 
+-  fprintf(stderr, "triangle x%lx with orientation %d:\n", (unsigned long) t->tri,
++  fprintf(stderr, "triangle x%llx with orientation %d:\n", (unsigned long long) t->tri,
+          t->orient);
+   decode(t->tri[0], printtri);
+   if (printtri.tri == m->dummytri) {
+     fprintf(stderr, "    [0] = Outer space\n");
+   } else {
+-    fprintf(stderr, "    [0] = x%lx  %d\n", (unsigned long) printtri.tri,
++    fprintf(stderr, "    [0] = x%llx  %d\n", (unsigned long long) printtri.tri,
+            printtri.orient);
+   }
+   decode(t->tri[1], printtri);
+   if (printtri.tri == m->dummytri) {
+     fprintf(stderr, "    [1] = Outer space\n");
+   } else {
+-    fprintf(stderr, "    [1] = x%lx  %d\n", (unsigned long) printtri.tri,
++    fprintf(stderr, "    [1] = x%llx  %d\n", (unsigned long long) printtri.tri,
+            printtri.orient);
+   }
+   decode(t->tri[2], printtri);
+   if (printtri.tri == m->dummytri) {
+     fprintf(stderr, "    [2] = Outer space\n");
+   } else {
+-    fprintf(stderr, "    [2] = x%lx  %d\n", (unsigned long) printtri.tri,
++    fprintf(stderr, "    [2] = x%llx  %d\n", (unsigned long long) printtri.tri,
+            printtri.orient);
+   }
+ 
+@@ -3565,38 +3603,38 @@
+   if (printvertex == (vertex) NULL)
+     fprintf(stderr, "    Origin[%d] = NULL\n", (t->orient + 1) % 3 + 3);
+   else
+-    fprintf(stderr, "    Origin[%d] = x%lx  (%.12g, %.12g)\n",
+-           (t->orient + 1) % 3 + 3, (unsigned long) printvertex,
++    fprintf(stderr, "    Origin[%d] = x%llx  (%.12g, %.12g)\n",
++           (t->orient + 1) % 3 + 3, (unsigned long long) printvertex,
+            printvertex[0], printvertex[1]);
+   dest(*t, printvertex);
+   if (printvertex == (vertex) NULL)
+     fprintf(stderr, "    Dest  [%d] = NULL\n", (t->orient + 2) % 3 + 3);
+   else
+-    fprintf(stderr, "    Dest  [%d] = x%lx  (%.12g, %.12g)\n",
+-           (t->orient + 2) % 3 + 3, (unsigned long) printvertex,
++    fprintf(stderr, "    Dest  [%d] = x%llx  (%.12g, %.12g)\n",
++           (t->orient + 2) % 3 + 3, (unsigned long long) printvertex,
+            printvertex[0], printvertex[1]);
+   apex(*t, printvertex);
+   if (printvertex == (vertex) NULL)
+     fprintf(stderr, "    Apex  [%d] = NULL\n", t->orient + 3);
+   else
+-    fprintf(stderr, "    Apex  [%d] = x%lx  (%.12g, %.12g)\n",
+-           t->orient + 3, (unsigned long) printvertex,
++    fprintf(stderr, "    Apex  [%d] = x%llx  (%.12g, %.12g)\n",
++           t->orient + 3, (unsigned long long) printvertex,
+            printvertex[0], printvertex[1]);
+ 
+   if (b->usesegments) {
+     sdecode(t->tri[6], printsh);
+     if (printsh.ss != m->dummysub) {
+-      fprintf(stderr, "    [6] = x%lx  %d\n", (unsigned long) printsh.ss,
++      fprintf(stderr, "    [6] = x%llx  %d\n", (unsigned long long) printsh.ss,
+              printsh.ssorient);
+     }
+     sdecode(t->tri[7], printsh);
+     if (printsh.ss != m->dummysub) {
+-      fprintf(stderr, "    [7] = x%lx  %d\n", (unsigned long) printsh.ss,
++      fprintf(stderr, "    [7] = x%llx  %d\n", (unsigned long long) printsh.ss,
+              printsh.ssorient);
+     }
+     sdecode(t->tri[8], printsh);
+     if (printsh.ss != m->dummysub) {
+-      fprintf(stderr, "    [8] = x%lx  %d\n", (unsigned long) printsh.ss,
++      fprintf(stderr, "    [8] = x%llx  %d\n", (unsigned long long) printsh.ss,
+              printsh.ssorient);
+     }
+   }
+@@ -3631,20 +3669,20 @@
+   struct otri printtri;
+   vertex printvertex;
+ 
+-  fprintf(stderr, "subsegment x%lx with orientation %d and mark %d:\n",
+-         (unsigned long) s->ss, s->ssorient, mark(*s));
++  fprintf(stderr, "subsegment x%llx with orientation %d and mark %d:\n",
++         (unsigned long long) s->ss, s->ssorient, mark(*s));
+   sdecode(s->ss[0], printsh);
+   if (printsh.ss == m->dummysub) {
+     fprintf(stderr, "    [0] = No subsegment\n");
+   } else {
+-    fprintf(stderr, "    [0] = x%lx  %d\n", (unsigned long) printsh.ss,
++    fprintf(stderr, "    [0] = x%llx  %d\n", (unsigned long long) printsh.ss,
+            printsh.ssorient);
+   }
+   sdecode(s->ss[1], printsh);
+   if (printsh.ss == m->dummysub) {
+     fprintf(stderr, "    [1] = No subsegment\n");
+   } else {
+-    fprintf(stderr, "    [1] = x%lx  %d\n", (unsigned long) printsh.ss,
++    fprintf(stderr, "    [1] = x%llx  %d\n", (unsigned long long) printsh.ss,
+            printsh.ssorient);
+   }
+ 
+@@ -3652,29 +3690,29 @@
+   if (printvertex == (vertex) NULL)
+     fprintf(stderr, "    Origin[%d] = NULL\n", 2 + s->ssorient);
+   else
+-    fprintf(stderr, "    Origin[%d] = x%lx  (%.12g, %.12g)\n",
+-           2 + s->ssorient, (unsigned long) printvertex,
++    fprintf(stderr, "    Origin[%d] = x%llx  (%.12g, %.12g)\n",
++           2 + s->ssorient, (unsigned long long) printvertex,
+            printvertex[0], printvertex[1]);
+   sdest(*s, printvertex);
+   if (printvertex == (vertex) NULL)
+     fprintf(stderr, "    Dest  [%d] = NULL\n", 3 - s->ssorient);
+   else
+-    fprintf(stderr, "    Dest  [%d] = x%lx  (%.12g, %.12g)\n",
+-           3 - s->ssorient, (unsigned long) printvertex,
++    fprintf(stderr, "    Dest  [%d] = x%llx  (%.12g, %.12g)\n",
++           3 - s->ssorient, (unsigned long long) printvertex,
+            printvertex[0], printvertex[1]);
+ 
+   decode(s->ss[4], printtri);
+   if (printtri.tri == m->dummytri) {
+     fprintf(stderr, "    [4] = Outer space\n");
+   } else {
+-    fprintf(stderr, "    [4] = x%lx  %d\n", (unsigned long) printtri.tri,
++    fprintf(stderr, "    [4] = x%llx  %d\n", (unsigned long long) printtri.tri,
+            printtri.orient);
+   }
+   decode(s->ss[5], printtri);
+   if (printtri.tri == m->dummytri) {
+     fprintf(stderr, "    [5] = Outer space\n");
+   } else {
+-    fprintf(stderr, "    [5] = x%lx  %d\n", (unsigned long) printtri.tri,
++    fprintf(stderr, "    [5] = x%llx  %d\n", (unsigned long long) printtri.tri,
+            printtri.orient);
+   }
+ }
+@@ -3705,7 +3743,7 @@
+ #endif /* not ANSI_DECLARATORS */
+ 
+ {
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+ 
+   pool->items = 0;
+   pool->maxitems = 0;
+@@ -3713,11 +3751,11 @@
+   /* Set the currently active block. */
+   pool->nowblock = pool->firstblock;
+   /* Find the first item in the pool.  Increment by the size of (VOID *). */
+-  alignptr = (unsigned long) (pool->nowblock + 1);
++  alignptr = (tri_uintptr) (pool->nowblock + 1);
+   /* Align the item on an `alignbytes'-byte boundary. */
+   pool->nextitem = (VOID *)
+-    (alignptr + (unsigned long) pool->alignbytes -
+-     (alignptr % (unsigned long) pool->alignbytes));
++    (alignptr + (tri_uintptr) pool->alignbytes -
++     (alignptr % (tri_uintptr) pool->alignbytes));
+   /* There are lots of unallocated items left in this block. */
+   pool->unallocateditems = pool->itemsperblock;
+   /* The stack of deallocated items is empty. */
+@@ -3826,7 +3864,7 @@
+ {
+   VOID *newitem;
+   VOID **newblock;
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+ 
+   /* First check the linked list of dead items.  If the list is not   */
+   /*   empty, allocate an item from the list rather than a fresh one. */
+@@ -3849,11 +3887,11 @@
+       pool->nowblock = (VOID **) *(pool->nowblock);
+       /* Find the first item in the block.    */
+       /*   Increment by the size of (VOID *). */
+-      alignptr = (unsigned long) (pool->nowblock + 1);
++      alignptr = (tri_uintptr) (pool->nowblock + 1);
+       /* Align the item on an `alignbytes'-byte boundary. */
+       pool->nextitem = (VOID *)
+-        (alignptr + (unsigned long) pool->alignbytes -
+-         (alignptr % (unsigned long) pool->alignbytes));
++        (alignptr + (tri_uintptr) pool->alignbytes -
++         (alignptr % (tri_uintptr) pool->alignbytes));
+       /* There are lots of unallocated items left in this block. */
+       pool->unallocateditems = pool->itemsperblock;
+     }
+@@ -3911,16 +3949,16 @@
+ #endif /* not ANSI_DECLARATORS */
+ 
+ {
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+ 
+   /* Begin the traversal in the first block. */
+   pool->pathblock = pool->firstblock;
+   /* Find the first item in the block.  Increment by the size of (VOID *). */
+-  alignptr = (unsigned long) (pool->pathblock + 1);
++  alignptr = (tri_uintptr) (pool->pathblock + 1);
+   /* Align with item on an `alignbytes'-byte boundary. */
+   pool->pathitem = (VOID *)
+-    (alignptr + (unsigned long) pool->alignbytes -
+-     (alignptr % (unsigned long) pool->alignbytes));
++    (alignptr + (tri_uintptr) pool->alignbytes -
++     (alignptr % (tri_uintptr) pool->alignbytes));
+   /* Set the number of items left in the current block. */
+   pool->pathitemsleft = pool->itemsperblock;
+ }
+@@ -3948,7 +3986,7 @@
+ 
+ {
+   VOID *newitem;
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+ 
+   /* Stop upon exhausting the list of items. */
+   if (pool->pathitem == pool->nextitem) {
+@@ -3959,11 +3997,11 @@
+     /* Find the next block. */
+     pool->pathblock = (VOID **) *(pool->pathblock);
+     /* Find the first item in the block.  Increment by the size of (VOID *). */
+-    alignptr = (unsigned long) (pool->pathblock + 1);
++    alignptr = (tri_uintptr) (pool->pathblock + 1);
+     /* Align with item on an `alignbytes'-byte boundary. */
+     pool->pathitem = (VOID *)
+-      (alignptr + (unsigned long) pool->alignbytes -
+-       (alignptr % (unsigned long) pool->alignbytes));
++      (alignptr + (tri_uintptr) pool->alignbytes -
++       (alignptr % (tri_uintptr) pool->alignbytes));
+     /* Set the number of items left in the current block. */
+     pool->pathitemsleft = pool->itemsperblock;
+   }
+@@ -4018,16 +4056,16 @@
+ #endif /* not ANSI_DECLARATORS */
+ 
+ {
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+ 
+   /* Set up `dummytri', the `triangle' that occupies "outer space." */
+   m->dummytribase = (triangle *) trimalloc(trianglewords * sizeof(triangle) +
+                                            m->triangles.alignbytes);
+   /* Align `dummytri' on a `triangles.alignbytes'-byte boundary. */
+-  alignptr = (unsigned long) m->dummytribase;
++  alignptr = (tri_uintptr) m->dummytribase;
+   m->dummytri = (triangle *)
+-    (alignptr + (unsigned long) m->triangles.alignbytes -
+-     (alignptr % (unsigned long) m->triangles.alignbytes));
++    (alignptr + (tri_uintptr) m->triangles.alignbytes -
++     (alignptr % (tri_uintptr) m->triangles.alignbytes));
+   /* Initialize the three adjoining triangles to be "outer space."  These  */
+   /*   will eventually be changed by various bonding operations, but their */
+   /*   values don't really matter, as long as they can legally be          */
+@@ -4047,10 +4085,10 @@
+     m->dummysubbase = (subseg *) trimalloc(subsegwords * sizeof(subseg) +
+                                            m->subsegs.alignbytes);
+     /* Align `dummysub' on a `subsegs.alignbytes'-byte boundary. */
+-    alignptr = (unsigned long) m->dummysubbase;
++    alignptr = (tri_uintptr) m->dummysubbase;
+     m->dummysub = (subseg *)
+-      (alignptr + (unsigned long) m->subsegs.alignbytes -
+-       (alignptr % (unsigned long) m->subsegs.alignbytes));
++      (alignptr + (tri_uintptr) m->subsegs.alignbytes -
++       (alignptr % (tri_uintptr) m->subsegs.alignbytes));
+     /* Initialize the two adjoining subsegments to be the omnipresent      */
+     /*   subsegment.  These will eventually be changed by various bonding  */
+     /*   operations, but their values don't really matter, as long as they */
+@@ -4400,7 +4438,7 @@
+ {
+   VOID **getblock;
+   vertex foundvertex;
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+   int current;
+ 
+   getblock = m->vertices.firstblock;
+@@ -4411,9 +4449,9 @@
+     current += m->vertices.itemsperblock;
+   }
+   /* Now find the right vertex. */
+-  alignptr = (unsigned long) (getblock + 1);
+-  foundvertex = (vertex) (alignptr + (unsigned long) m->vertices.alignbytes -
+-                          (alignptr % (unsigned long) m->vertices.alignbytes));
++  alignptr = (tri_uintptr) (getblock + 1);
++  foundvertex = (vertex) (alignptr + (tri_uintptr) m->vertices.alignbytes -
++                          (alignptr % (tri_uintptr) m->vertices.alignbytes));
+   while (current < number) {
+     foundvertex += m->vertices.itemwords;
+     current++;
+@@ -7631,7 +7669,7 @@
+   triangle *firsttri;
+   struct otri sampletri;
+   vertex torg, tdest;
+-  unsigned long alignptr;
++  tri_uintptr alignptr;
+   REAL searchdist, dist;
+   REAL ahead;
+   long sampleblocks, samplesperblock, samplenum;
+@@ -7688,9 +7726,9 @@
+   sampleblock = m->triangles.firstblock;
+   sampletri.orient = 0;
+   for (i = 0; i < sampleblocks; i++) {
+-    alignptr = (unsigned long) (sampleblock + 1);
+-    firsttri = (triangle *) (alignptr + (unsigned long) m->triangles.alignbytes
+-                      - (alignptr % (unsigned long) m->triangles.alignbytes));
++    alignptr = (tri_uintptr) (sampleblock + 1);
++    firsttri = (triangle *) (alignptr + (tri_uintptr) m->triangles.alignbytes
++                      - (alignptr % (tri_uintptr) m->triangles.alignbytes));
+     for (j = 0; j < samplesperblock; j++) {
+       if (i == triblocks - 1) {
+         samplenum = randomnation((int)

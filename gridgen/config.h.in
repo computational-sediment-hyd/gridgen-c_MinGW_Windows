@@ -4,6 +4,7 @@
 #undef HAVE__COMPLEX__
 #undef NOCOMPLEX
 #undef HAVE_GRIDNODES_H
+#undef NO_TIMER
 
 #if defined(HAVE_COMPLEX)
  #include <complex.h>

@@ -8,20 +8,17 @@
 # You can also customize the configuration process via the environment
 # variables seen by ./configure.  For example:
 #
-#     In csh(1):
-#	  % setenv CC acc
-#	  & setenv CFLAGS -g
-#	  % ./configure
-#
-#     In sh(1) or ksh(1):
-#	  $ CC=acc CFLAGS=-g ./configure
+#     In sh(1), bash(1) or the MSYS2/MinGW shell:
+#	  $ CC=gcc CFLAGS=-g ./configure
 #
 # Variables in this file override the environmental ones.
 #
 #############################################################################
 
 # C compiler
-if [ -z "$CC" ]; then
+# NOTE: do not override CC when cross-compiling (./configure --host=...),
+#       otherwise the cross compiler chosen by AC_PROG_CC would be clobbered.
+if [ -z "$CC" ] && [ -z "$host_alias" ]; then
   CC=gcc
 fi
 
@@ -33,8 +30,17 @@ fi
 CFLAGS_TRIANGLE="$CFLAGS -w -ffloat-store"
 
 # Linker flags
+# On MinGW/MSYS2 there is no /usr/local/lib in the native (Windows) sense,
+# so do not force it onto the link line there.
 if [ -z "$LDFLAGS" ]; then
-  LDFLAGS="-L/usr/local/lib"
+  case "${host_os}" in
+    mingw* | msys* | cygwin*)
+      LDFLAGS=""
+      ;;
+    *)
+      LDFLAGS="-L/usr/local/lib"
+      ;;
+  esac
 fi
 
 # Installation prefix (default is /usr/local)

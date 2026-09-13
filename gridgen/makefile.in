@@ -1,5 +1,6 @@
 #
 # makefile.in - Input makefile for the configure script.
+#               (MinGW/MSYS2 correspondence version)
 #
 
 SHELL = /bin/sh
@@ -34,10 +35,25 @@ LDFLAGS = @LDFLAGS@
 
 AR = @AR@
 ARFLAGS = cru
+RANLIB = @RANLIB@
+STRIP = @STRIP@
 
 LIBS = @LIBS@
 
 MLIB = -lm
+
+# --- host dependent (determined by configure) ------------------------
+# EXEEXT        : ".exe" on Windows, empty on Unix
+# PICFLAG       : "-fPIC" on Unix, empty on Windows (not needed for DLLs)
+# SHLIB         : libgridgen.dll / libgridgen.so / libgridgen.dylib
+# SHLIB_LDFLAGS : -shared -Wl,--out-implib,... etc.
+EXEEXT = @EXEEXT@
+PICFLAG = @PICFLAG@
+SHLIB = @SHLIB@
+SHLIB_LDFLAGS = @SHLIB_LDFLAGS@
+WIN32 = @WIN32@
+
+PROG = gridgen$(EXEEXT)
 
 #### end of configuration section ####
 
@@ -84,61 +100,61 @@ LIBOBJS = $(LIBSRC:.c=.o)
 
 SHLIBOBJS = $(LIBSRC:.c=.t)
 %.t: %.c
-	$(CC) $(CFLAGS) -fPIC -c $< -o $@
+	$(CC) $(CFLAGS) $(PICFLAG) -c $< -o $@
 
-all: gridgen
+all: $(PROG)
 	@if [ ! -f libgridgen.a ] ; then \
 	   echo "  type 'make lib' to make libgridgen.a"; \
 	fi
-	@if [ ! -f libgridgen.so ] ; then \
-	   echo "  type 'make shlib' to make libgridgen.so"; \
+	@if [ ! -f $(SHLIB) ] ; then \
+	   echo "  type 'make shlib' to make $(SHLIB)"; \
 	fi
 
 lib: libgridgen.a
 
-shlib: libgridgen.so
+shlib: $(SHLIB)
 
-gridgen: main.c $(HEADERS) $(SRC) triangle.o
-	$(CC) -o gridgen -DGRIDGEN_STANDALONE $(CFLAGS) main.c $(SRC) triangle.o $(LDFLAGS) $(MLIB)
+$(PROG): main.c $(HEADERS) $(SRC) triangle.o
+	$(CC) -o $(PROG) -DGRIDGEN_STANDALONE $(CFLAGS) main.c $(SRC) triangle.o $(LDFLAGS) $(MLIB)
 
 tests: broyden.c issimplepoly.c hash.c
-	$(CC) -o test_broyden broyden.c -DTEST_BROYDEN $(CFLAGS) -I. $(MLIB)
-	$(CC) -o issimplepoly issimplepoly.c -DTEST_SI $(CFLAGS) -I. $(MLIB)
-	$(CC) -o test_hash hash.c -DHT_TEST $(CFLAGS) -I. $(MLIB)
+	$(CC) -o test_broyden$(EXEEXT) broyden.c -DTEST_BROYDEN $(CFLAGS) -I. $(MLIB)
+	$(CC) -o issimplepoly$(EXEEXT) issimplepoly.c -DTEST_SI $(CFLAGS) -I. $(MLIB)
+	$(CC) -o test_hash$(EXEEXT) hash.c -DHT_TEST $(CFLAGS) -I. $(MLIB)
 
 standalone: override CFLAGS+=-static
-standalone: gridgen tests
-	strip gridgen
-	strip issimplepoly
+standalone: $(PROG) tests
+	$(STRIP) $(PROG)
+	$(STRIP) issimplepoly$(EXEEXT)
 
 libgridgen.a: $(HEADERS) triangle.o $(LIBOBJS)
 	$(AR) $(ARFLAGS) $@ $(LIBOBJS) triangle.o
-	chmod go+r $@
+	-$(RANLIB) $@
+	-chmod go+r $@
 
-libgridgen.so: $(HEADERS) triangle.t $(SHLIBOBJS)
+$(SHLIB): $(HEADERS) triangle.t $(SHLIBOBJS)
 	rm -f $@
-	$(CC) -shared -o $@ $(SHLIBOBJS) triangle.t $(LDFLAGS) $(LIBS)
+	$(CC) $(SHLIB_LDFLAGS) -o $@ $(SHLIBOBJS) triangle.t $(LDFLAGS) $(LIBS) $(MLIB)
 
 triangle.o: triangle.c
-	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c
+	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c -o triangle.o
 
 triangle.t: triangle.c
-	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -fPIC -I. triangle.c -o triangle.t
+	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) $(PICFLAG) -I. triangle.c -o triangle.t
 
 installdirs: $(INSTALLDIRS)
 	@$(SHELL) mkinstalldirs $(INSTALLDIRS)
 
 install: all installdirs
-	@for i in gridgen; do \
+	@for i in $(PROG); do \
 	   echo "  installing $$i"; \
-	   fname=`basename $$i`; \
 	   $(INSTALL_PROGRAM) $$i $(bindir); \
 	done
 	@for i in gridgen.h; do \
 	   echo "  installing $$i"; \
 	   $(INSTALL_DATA) $$i $(includedir); \
 	done
-	@for i in libgridgen.a libgridgen.so; do \
+	@for i in libgridgen.a $(SHLIB) libgridgen.dll.a; do \
 	   if test -f $$i; then \
 	      echo "  installing $$i"; \
 	      $(INSTALL_DATA) $$i $(libdir)/$$i; \
@@ -146,7 +162,9 @@ install: all installdirs
 	done
 
 clean:
-	rm -f *.o *.t c99-min/*.o *.a *.so *~ \#*\# core gridgen issimplepoly test_broyden test_hash
+	rm -f *.o *.t c99-min/*.o *.a *.so *.dll *.dylib *~ \#*\# core \
+	gridgen gridgen.exe issimplepoly issimplepoly.exe \
+	test_broyden test_broyden.exe test_hash test_hash.exe
 
 configclean:
 	rm -f config.h makefile config.cache config.status config.log

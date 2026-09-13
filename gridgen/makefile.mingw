@@ -1,0 +1,66 @@
+#
+# makefile.mingw -- MSYS2 シェルを使わずに素の Windows cmd.exe +
+#                   MinGW-w64 + mingw32-make でビルドするための makefile。
+#                   (configure / sh / autoconf は不要)
+#
+#   > copy config.h.mingw config.h
+#   > mingw32-make -f makefile.mingw
+#   > mingw32-make -f makefile.mingw lib
+#   > mingw32-make -f makefile.mingw shlib
+#   > mingw32-make -f makefile.mingw clean
+#
+# MSYS2 の MinGW シェルが使えるなら ./configure && make のほうが推奨。
+#
+
+CC      = gcc
+AR      = ar
+ARFLAGS = cru
+RANLIB  = ranlib
+RM      = del /Q
+
+CFLAGS          = -O2 -Wall -DANSI_DECLARATORS -DNO_TIMER
+CFLAGS_TRIANGLE = -O2 -w -ffloat-store -DANSI_DECLARATORS -DNO_TIMER
+LDFLAGS =
+MLIB    = -lm
+
+SHLIB_LDFLAGS = -shared -Wl,--out-implib,libgridgen.dll.a -Wl,--export-all-symbols
+
+SRC = broyden.c delaunay.c geom.c gridgen.c hash.c issimplepoly.c \
+      istack.c ode.c swcr.c vertlist.c zode.c
+
+HEADERS = broyden.h delaunay.h geom.h gridgen.h hash.h issimplepoly.h \
+          istack.h nan.h ode.h swcr.h version.h vertlist.h zode.h
+
+OBJS  = $(SRC:.c=.o)
+TOBJS = $(SRC:.c=.t)
+
+all: gridgen.exe
+
+gridgen.exe: main.c $(HEADERS) $(SRC) triangle.o
+	$(CC) -o gridgen.exe -DGRIDGEN_STANDALONE $(CFLAGS) main.c $(SRC) triangle.o $(LDFLAGS) $(MLIB)
+
+lib: libgridgen.a
+
+shlib: libgridgen.dll
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+%.t: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+triangle.o: triangle.c
+	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c -o triangle.o
+
+triangle.t: triangle.c
+	$(CC) -c -DTRILIBRARY $(CFLAGS_TRIANGLE) -I. triangle.c -o triangle.t
+
+libgridgen.a: $(HEADERS) triangle.o $(OBJS)
+	$(AR) $(ARFLAGS) $@ $(OBJS) triangle.o
+	$(RANLIB) $@
+
+libgridgen.dll: $(HEADERS) triangle.t $(TOBJS)
+	$(CC) $(SHLIB_LDFLAGS) -o $@ $(TOBJS) triangle.t $(LDFLAGS) $(MLIB)
+
+clean:
+	-$(RM) *.o *.t *.a *.dll *.exe
