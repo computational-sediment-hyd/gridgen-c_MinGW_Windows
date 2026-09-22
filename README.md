@@ -5,6 +5,10 @@ Therefore, I am publishing a modified version that can be built on Windows using
 
 Please refer to the following page for details.
 
+ - <https://cshforf.blogspot.com/2026/09/making-gridgen-c-buildable-with-mingw.html>
+ - <https://computational-sediment-hyd.hatenablog.jp/entry/2026/09/14/000810>(in Japanese)
+
+
 
 <!-- ## gridgen ## -->
 <!--  -->
